@@ -37,9 +37,9 @@ String lastBValue = "";
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// #define EEPROM_SIZE 12
-// #define ADDR_PREVIOUS_A_VALUE 0
-// #define ADDR_PREVIOUS_B_VALUE (ADDR_PREVIOUS_A_VALUE + sizeof(lastAValue))
+#define EEPROM_SIZE 12
+#define ADDR_PREVIOUS_A_VALUE 0
+#define ADDR_PREVIOUS_B_VALUE (ADDR_PREVIOUS_A_VALUE + sizeof(lastAValue))
 
 class MyServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -87,10 +87,30 @@ void setup() {
   BLEDevice::startAdvertising();
   Serial.println("BLE device is ready to be connected");
 
-  // EEPROM.begin(512);
+  EEPROM.begin(512);
 
-  // EEPROM.get(ADDR_PREVIOUS_A_VALUE, lastAValue);
-  // EEPROM.get(ADDR_PREVIOUS_B_VALUE, lastBValue);
+  EEPROM.get(ADDR_PREVIOUS_A_VALUE, lastAValue);
+  EEPROM.get(ADDR_PREVIOUS_B_VALUE, lastBValue);
+  Serial.println("lastAValue: " + lastAValue);
+  Serial.println("lastBValue: " + lastBValue);
+
+  if (lastAValue.startsWith("A")) {
+    duration13 = lastAValue.substring(1).toInt(); // stores the duration given by the user
+    startTime13 = millis(); // start time of activation of pin 13
+    digitalWrite(pin13, HIGH); // turns the pin 13 on
+    pin13State = true;
+    activationCount = 1; // reboots the counter of daily activations
+
+    Serial.println("Pin 13 is ON");
+  }        
+  if (lastBValue.startsWith("B")) {
+    maxActivations = lastBValue.substring(1).toInt();
+    intervalDuration = 24 * 60 * 60 * 1000 / maxActivations;
+    previousActivationTime = millis(); 
+
+    Serial.println("Time set to activate the motor: " + String(duration13));
+    Serial.println("Maximum number of daily activations: " + String(maxActivations));
+  }
 }
 
 void loop() {
@@ -109,8 +129,8 @@ void loop() {
         // Command A
         if (value.startsWith("A") && value != lastAValue) {
           lastAValue = value;
-          // EEPROM.put(ADDR_PREVIOUS_A_VALUE, lastAValue);
-          // EEPROM.commit();
+          EEPROM.put(ADDR_PREVIOUS_A_VALUE, lastAValue);
+          EEPROM.commit();
 
           duration13 = value.substring(1).toInt(); // stores the duration given by the user
           startTime13 = millis(); // start time of activation of pin 13
@@ -122,8 +142,8 @@ void loop() {
         }        
         else if (value.startsWith("B") && value != lastBValue) {
           lastBValue = value;
-          // EEPROM.put(ADDR_PREVIOUS_B_VALUE, lastBValue);
-          // EEPROM.commit();
+          EEPROM.put(ADDR_PREVIOUS_B_VALUE, lastBValue);
+          EEPROM.commit();
 
           maxActivations = value.substring(1).toInt();
           intervalDuration = 24 * 60 * 60 * 1000 / maxActivations;
@@ -136,9 +156,14 @@ void loop() {
       }
     }
 
+    Serial.println("Hello 1");
+
     // Check if the specified time in A for pin 13 has already passed
     if (pin13State && millis() - startTime13 >= duration13 * 1000) {
-      digitalWrite(pin13, LOW); // turns of pin 13
+
+      Serial.println("Hello 2");
+
+      digitalWrite(pin13, LOW); // turns off pin 13
       pin13State = false;
 
       Serial.println("Pin 13 is OFF");
