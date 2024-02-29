@@ -2,6 +2,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <EEPROM.h>
 
 BLECharacteristic *pCharacteristic;
 
@@ -15,7 +16,7 @@ const int pin12 = 12; // safety digital output pin
 
 int activationCount = 0; // current number of motor ativations
 int maxActivations = 0; // maximum number of motor activations
-int timeSafeMode = 10; // safe mode timer
+int timeSafeMode = 10; // safe mode timer (OPTIONS - change timeSafeMode according to the wanted time for safe mode; the variable is in seconds)
 
 unsigned long startTime13 = 0; // starting time of pin 12
 unsigned long startTime34 = 0; // starting time of pin 34
@@ -30,11 +31,15 @@ bool pin13State = false;
 bool pin34Activated = false;
 bool safeModeActive = false;
 
-String previousAValue = "";
-String previousBValue = "";
+String lastAValue = "";
+String lastBValue = "";
 
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// #define EEPROM_SIZE 12
+// #define ADDR_PREVIOUS_A_VALUE 0
+// #define ADDR_PREVIOUS_B_VALUE (ADDR_PREVIOUS_A_VALUE + sizeof(lastAValue))
 
 class MyServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -55,6 +60,7 @@ void setup() {
   pinMode(ledPinSAFE, OUTPUT);
   digitalWrite(pin12, LOW);
 
+  //OPTIONS - change the name of the board here
   BLEDevice::init("TheSmartFeeder");
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -71,9 +77,6 @@ void setup() {
 
   pService->start();
 
-  // BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  // pAdvertising->start();
-
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
@@ -83,6 +86,11 @@ void setup() {
   pAdvertising->setMaxPreferred(0x00);
   BLEDevice::startAdvertising();
   Serial.println("BLE device is ready to be connected");
+
+  // EEPROM.begin(512);
+
+  // EEPROM.get(ADDR_PREVIOUS_A_VALUE, lastAValue);
+  // EEPROM.get(ADDR_PREVIOUS_B_VALUE, lastBValue);
 }
 
 void loop() {
@@ -99,8 +107,11 @@ void loop() {
         String value = pCharacteristic->getValue().c_str();
 
         // Command A
-        if (value.startsWith("A") && value != previousAValue) {
-          previousAValue = value;
+        if (value.startsWith("A") && value != lastAValue) {
+          lastAValue = value;
+          // EEPROM.put(ADDR_PREVIOUS_A_VALUE, lastAValue);
+          // EEPROM.commit();
+
           duration13 = value.substring(1).toInt(); // stores the duration given by the user
           startTime13 = millis(); // start time of activation of pin 13
           digitalWrite(pin13, HIGH); // turns the pin 13 on
@@ -109,8 +120,11 @@ void loop() {
 
           Serial.println("Pin 13 is ON");
         }        
-        else if (value.startsWith("B") && value != previousBValue) {
-          previousBValue = value;
+        else if (value.startsWith("B") && value != lastBValue) {
+          lastBValue = value;
+          // EEPROM.put(ADDR_PREVIOUS_B_VALUE, lastBValue);
+          // EEPROM.commit();
+
           maxActivations = value.substring(1).toInt();
           intervalDuration = 24 * 60 * 60 * 1000 / maxActivations;
           //intervalDuration = 1000 * maxActivations; // for tests only
@@ -150,11 +164,10 @@ void loop() {
     }
   }
 
+
   // SAFE MODE
 
   //Check if pin 34 has been on for more than 10 seconds
-  // TO DO - é 10 segundos mesmo??
-  // TO DO - o que é o 50??
   if (analogRead(pin34) > 50 && !pin34Activated) {
     pin34Activated = true;
     startTime34 = millis();
