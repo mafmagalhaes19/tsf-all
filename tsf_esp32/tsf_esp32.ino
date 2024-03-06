@@ -7,27 +7,26 @@
 BLECharacteristic *pCharacteristic;
 
 bool deviceConnected = false;
-bool oldDeviceConnected = false;
 
 const int ledPinSAFE = 2; //safe mode pin
-const int pin13 = 13; // motor output pin
+const int pin13 = 13; // safety digital output pin 
 const int pin34 = 34; // input pin that checks when the motor is running
-const int pin12 = 12; // safety digital output pin
+const int pin12 = 12; // motor output pin
 
 int activationCount = 0; // current number of motor ativations
 int maxActivations = 0; // maximum number of motor activations
-int timeSafeMode = 10; // safe mode timer (OPTIONS - change timeSafeMode according to the wanted time for safe mode; the variable is in seconds)
+int timeSafeMode = 120; // safe mode timer (OPTIONS - change timeSafeMode according to the wanted time for safe mode; the variable is in seconds)
 
-unsigned long startTime13 = 0; // starting time of pin 12
+unsigned long startTime12 = 0; // starting time of pin 12
 unsigned long startTime34 = 0; // starting time of pin 34
-unsigned long duration13 = 0; // duration of pin 13
+unsigned long duration12 = 0; // duration of pin 12
 unsigned long intervalDuration = 0; // time between starts set by command B in milliseconds
-unsigned long previousActivationTime = 0; // last activation of pin 13
+unsigned long previousActivationTime = 0; // last activation of pin 12
 unsigned long previousTimeLPS = 0; 
 unsigned long currentTimeLPS = 0;
 const long intervalLPS = 1000;
 
-bool pin13State = false;
+bool pin12state = false;
 bool pin34Activated = false;
 bool safeModeActive = false;
 
@@ -37,7 +36,6 @@ String lastBValue = "";
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-#define EEPROM_SIZE 12
 #define ADDR_PREVIOUS_A_VALUE 0
 #define ADDR_PREVIOUS_B_VALUE (ADDR_PREVIOUS_A_VALUE + sizeof(lastAValue))
 
@@ -58,7 +56,7 @@ void setup() {
   pinMode(pin34, INPUT);
   pinMode(pin12, OUTPUT);
   pinMode(ledPinSAFE, OUTPUT);
-  digitalWrite(pin12, LOW);
+  digitalWrite(pin13, LOW);
 
   //OPTIONS - change the name of the board here
   BLEDevice::init("TheSmartFeeder");
@@ -95,20 +93,20 @@ void setup() {
   Serial.println("lastBValue: " + lastBValue);
 
   if (lastAValue.startsWith("A")) {
-    duration13 = lastAValue.substring(1).toInt(); // stores the duration given by the user
-    startTime13 = millis(); // start time of activation of pin 13
-    digitalWrite(pin13, HIGH); // turns the pin 13 on
-    pin13State = true;
+    duration12 = lastAValue.substring(1).toInt(); // stores the duration given by the user
+    startTime12 = millis(); // start time of activation of pin 12
+    digitalWrite(pin12, HIGH); // turns the pin 12 on
+    pin12state = true;
     activationCount = 1; // reboots the counter of daily activations
 
-    Serial.println("Pin 13 is ON");
+    Serial.println("Pin 12 is ON - setup");
   }        
   if (lastBValue.startsWith("B")) {
     maxActivations = lastBValue.substring(1).toInt();
     intervalDuration = 24 * 60 * 60 * 1000 / maxActivations;
     previousActivationTime = millis(); 
 
-    Serial.println("Time set to activate the motor: " + String(duration13));
+    Serial.println("Time set to activate the motor: " + String(duration12));
     Serial.println("Maximum number of daily activations: " + String(maxActivations));
   }
 }
@@ -117,11 +115,10 @@ void loop() {
   if (!deviceConnected) {
     BLEDevice::startAdvertising(); // Restart advertising
     delay(1000); // Delay to allow advertising to start
-    return;
   }
 
   // Ensures that the safe mode is off
-  if (digitalRead(pin12) == LOW) { 
+  if (digitalRead(pin13) == LOW) { 
     if (deviceConnected) {
       if (pCharacteristic->getValue().length() > 0) {
         String value = pCharacteristic->getValue().c_str();
@@ -132,13 +129,13 @@ void loop() {
           EEPROM.put(ADDR_PREVIOUS_A_VALUE, lastAValue);
           EEPROM.commit();
 
-          duration13 = value.substring(1).toInt(); // stores the duration given by the user
-          startTime13 = millis(); // start time of activation of pin 13
-          digitalWrite(pin13, HIGH); // turns the pin 13 on
-          pin13State = true;
+          duration12 = value.substring(1).toInt(); // stores the duration given by the user
+          startTime12 = millis(); // start time of activation of pin 12
+          digitalWrite(pin12, HIGH); // turns the pin 12 on
+          pin12state = true;
           activationCount = 1; // reboots the counter of daily activations
 
-          Serial.println("Pin 13 is ON");
+          Serial.println("Pin 12 is ON - new command");
         }        
         else if (value.startsWith("B") && value != lastBValue) {
           lastBValue = value;
@@ -150,37 +147,34 @@ void loop() {
           //intervalDuration = 1000 * maxActivations; // for tests only
           previousActivationTime = millis(); 
 
-          Serial.println("Time set to activate the motor: " + String(duration13));
+          Serial.println("Time set to activate the motor: " + String(duration12));
           Serial.println("Maximum number of daily activations: " + String(maxActivations));
         }
       }
     }
 
-    Serial.println("Hello 1");
 
-    // Check if the specified time in A for pin 13 has already passed
-    if (pin13State && millis() - startTime13 >= duration13 * 1000) {
+    // Check if the specified time in A for pin 12 has already passed
+    if (pin12state && millis() - startTime12 >= duration12 * 1000) {
 
-      Serial.println("Hello 2");
+      digitalWrite(pin12, LOW); // turns off pin 12
+      pin12state = false;
 
-      digitalWrite(pin13, LOW); // turns off pin 13
-      pin13State = false;
-
-      Serial.println("Pin 13 is OFF");
+      Serial.println("Pin 12 is OFF");
       Serial.print("Current number of daily motor activations: ");
       Serial.println(activationCount);
     }
 
     // Check if the specified time in B has already passed
     if (maxActivations > 0 && millis() - previousActivationTime >= intervalDuration) {
-      // Turns pin 13 on for the next activation
-      startTime13 = millis();
-      digitalWrite(pin13, HIGH);
-      pin13State = true;
+      // Turns pin 12 on for the next activation
+      startTime12 = millis();
+      digitalWrite(pin12, HIGH);
+      pin12state = true;
       activationCount++;
       previousActivationTime = millis();
 
-      Serial.println("Pin 13 is ON");
+      Serial.println("Pin 12 is ON");
     }
 
     // Check if the counter has reached the daily activations
@@ -191,15 +185,17 @@ void loop() {
 
 
   // SAFE MODE
+  // TODO - Fix and test Safe mode -> pin34 is always with value 0
 
-  //Check if pin 34 has been on for more than 10 seconds
+  // Check if pin34 is receiving energy
   if (analogRead(pin34) > 50 && !pin34Activated) {
     pin34Activated = true;
     startTime34 = millis();
   }
 
+  // Check if pin 34 has been on for more than 10 seconds
   else if (pin34Activated && millis() - startTime34 >= timeSafeMode * 1000) {
-    digitalWrite(pin12, HIGH);
+    digitalWrite(pin13, HIGH);
 
     Serial.println("SAFE MODE ON");
   }
@@ -209,7 +205,7 @@ void loop() {
   }
 
   // Safe Mode LED blinks
-  if (digitalRead(pin12) == HIGH) {
+  if (digitalRead(pin13) == HIGH) {
     currentTimeLPS = millis();
     if (currentTimeLPS - previousTimeLPS >= intervalLPS) {
       previousTimeLPS = currentTimeLPS;
